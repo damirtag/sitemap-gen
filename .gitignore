@@ -1,5 +1,5 @@
 # binary
-sitemap-gen
+/sitemap-gen
 
 # output files
 *.xml
