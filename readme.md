@@ -1,5 +1,7 @@
 # sitemap-gen
 
+![Tests](https://github.com/damirtag/sitemap-gen/actions/workflows/ci.yml/badge.svg)
+
 A concurrent sitemap generator written in Go. Feed it a URL, it crawls the entire domain and outputs a valid `sitemap.xml` — respecting depth limits, deduplicating URLs, and shutting down gracefully on Ctrl+C
 
 Built to explore goroutines, worker pools, context propagation, and graceful shutdown patterns
@@ -28,6 +30,12 @@ Requires Go 1.21+.
 
 ```bash
 ./sitemap-gen -url https://damir.top
+```
+
+## Tests
+
+```bash
+go test ./...
 ```
 
 ### Flags
