@@ -1,0 +1,20 @@
+# binary
+sitemap-gen
+
+# output files
+*.xml
+
+# profiling
+*.prof
+*.pprof
+
+# env
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
