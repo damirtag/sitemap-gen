@@ -15,6 +15,8 @@ import (
 
 	"sitemap-gen/internal/dedup"
 	"sitemap-gen/internal/metrics"
+	"sitemap-gen/internal/ratelimiter"
+	"sitemap-gen/internal/report"
 	"sitemap-gen/internal/scheduler"
 	"sitemap-gen/internal/sitemap"
 	"sitemap-gen/internal/worker"
@@ -49,30 +51,45 @@ func main() {
 	sm := sitemap.NewMap()
 
 	var wg sync.WaitGroup
-	worker.StartWorkers(ctx, *workers, queue, metrics, visited, sm, allowedHost, &wg)
+	limiter := ratelimiter.NewDomainLimiter(5, 10)
+	worker.StartWorkers(ctx, *workers, queue, metrics, visited, sm, allowedHost, limiter, &wg)
+
+	start := time.Now()
 
 	if visited.Add(*targetURL) {
 		queue.AddTask(scheduler.Task{URL: *targetURL, Depth: 0})
 	}
 
+	// why we doing this in a separate goroutine?
+	// so we can block on <-ctx.Done() in main and still
+	// allow workers to finish their current tasks before shutting down.
+	go func() {
+		wg.Wait()
+		log.Println("all work done, shutting down...")
+		stop() // cancels ctx, unblocks <-ctx.Done()
+	}()
+
 	<-ctx.Done()
 	log.Println("shutdown signal received")
 
 	queue.Stop()
-	time.Sleep(1 * time.Second)
-	queue.Close()
 
 	log.Println("waiting for workers...")
 	wg.Wait()
 
-	// write the sitemap
 	if err := sm.Write(*output); err != nil {
-		log.Printf("failed to write sitemap: %v\n", err)
-	} else {
-		log.Printf("sitemap written to %s (%d URLs)\n", *output, sm.Count())
+		log.Fatalf("failed to write sitemap: %v", err)
 	}
 
-	log.Printf("total: %d | errors: %d | unique URLs: %d\n",
-		metrics.GetTotalCount(), metrics.GetErrorCount(), visited.Count())
-	log.Println("done")
+	report.PrintShutdown(report.Stats{
+		TargetURL:   *targetURL,
+		OutputFile:  *output,
+		Total:       metrics.GetTotalCount(),
+		Success:     metrics.GetSuccessCount(),
+		Errors:      metrics.GetErrorCount(),
+		UniqueURLs:  visited.Count(),
+		SitemapURLs: sm.Count(),
+		Elapsed:     time.Since(start),
+		Workers:     *workers,
+	})
 }

@@ -27,7 +27,9 @@ type Map struct {
 }
 
 func NewMap() *Map {
-	return &Map{}
+	return &Map{
+		urls: make([]urlEntry, 0, 512),
+	}
 }
 
 func (m *Map) Add(pageURL string) {
@@ -48,9 +50,6 @@ func (m *Map) Count() int {
 }
 
 func (m *Map) Write(path string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	set := urlSet{
 		Xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
 		URLs:  m.urls,

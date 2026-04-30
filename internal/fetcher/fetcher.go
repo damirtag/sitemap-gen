@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Response struct {
@@ -13,7 +14,15 @@ type Response struct {
 	FinalURL   string // after redirects
 }
 
-var client = &http.Client{}
+var client = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  false,
+	},
+}
 
 func Fetch(ctx context.Context, url string) (*Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

@@ -1,8 +1,10 @@
 package metrics
 
+import "sync/atomic"
+
 type Metrics struct {
-	successCount int
-	errorCount   int
+	successCount atomic.Int64
+	errorCount   atomic.Int64
 }
 
 func NewMetrics() *Metrics {
@@ -10,21 +12,21 @@ func NewMetrics() *Metrics {
 }
 
 func (m *Metrics) IncSuccess() {
-	m.successCount++
+	m.successCount.Add(1)
 }
 
 func (m *Metrics) IncErrors() {
-	m.errorCount++
+	m.errorCount.Add(1)
 }
 
-func (m *Metrics) GetSuccessCount() int {
-	return m.successCount
+func (m *Metrics) GetSuccessCount() int64 {
+	return m.successCount.Load()
 }
 
-func (m *Metrics) GetErrorCount() int {
-	return m.errorCount
+func (m *Metrics) GetErrorCount() int64 {
+	return m.errorCount.Load()
 }
 
-func (m *Metrics) GetTotalCount() int {
-	return m.successCount + m.errorCount
+func (m *Metrics) GetTotalCount() int64 {
+	return m.successCount.Load() + m.errorCount.Load()
 }

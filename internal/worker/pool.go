@@ -5,12 +5,13 @@ import (
 	"log"
 	"runtime"
 	"sync"
-	"time"
+	"sync/atomic"
 
 	"sitemap-gen/internal/dedup"
 	"sitemap-gen/internal/fetcher"
 	"sitemap-gen/internal/metrics"
 	"sitemap-gen/internal/parser"
+	"sitemap-gen/internal/ratelimiter"
 	"sitemap-gen/internal/scheduler"
 	"sitemap-gen/internal/sitemap"
 )
@@ -25,11 +26,15 @@ func StartWorkers(
 	visited *dedup.Set,
 	sm *sitemap.Map,
 	allowedHost string,
+	limiter *ratelimiter.DomainLimiter,
 	wg *sync.WaitGroup,
 ) {
+	idle := atomic.Int32{}
+
 	for i := 0; i < n; i++ {
 		wg.Add(1)
-		go workerLoop(ctx, i, q, visited, m, sm, allowedHost, wg)
+		// run worker loop in separate goroutine
+		go workerLoop(ctx, i, q, visited, m, sm, allowedHost, limiter, wg, &idle, int32(n))
 	}
 }
 
@@ -41,19 +46,37 @@ func workerLoop(
 	m *metrics.Metrics,
 	sm *sitemap.Map,
 	allowedHost string,
+	limiter *ratelimiter.DomainLimiter,
 	wg *sync.WaitGroup,
+	idle *atomic.Int32,
+	totalWorkers int32,
 ) {
 	defer wg.Done()
 
 	for {
+		idle.Add(1)
+		if idle.Load() == totalWorkers && len(q.Chan()) == 0 {
+			idle.Add(-1)
+			log.Printf("worker %d: all workers idle, shutting down...\n", id)
+			q.Stop()
+			q.Close()
+			return
+		}
+
 		select {
 		case <-ctx.Done():
+			idle.Add(-1)
 			log.Printf("worker %d stopping...\n", id)
 			return
 
 		case task, ok := <-q.Chan():
+			idle.Add(-1)
 			if !ok {
 				log.Printf("worker %d queue closed\n", id)
+				return
+			}
+
+			if err := limiter.Wait(ctx, task.URL); err != nil {
 				return
 			}
 
@@ -86,8 +109,6 @@ func workerLoop(
 					q.AddTask(scheduler.Task{URL: link, Depth: task.Depth + 1})
 				}
 			}
-
-			time.Sleep(200 * time.Millisecond)
 		}
 	}
 }
